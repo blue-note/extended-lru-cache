@@ -2,7 +2,7 @@ import java.util.*;
 
 public class ExtendedLRUCache {
   TreeMap<Integer, QueueElem> expiryMap;
-  TreeMap<Integer, Queue<QueueElem>> priorityMap;
+  TreeMap<Integer, Map<String, QueueElem>> priorityMap;
   Map<String, QueueElem> keyMap;
   int maxSize;
 
@@ -33,30 +33,30 @@ public class ExtendedLRUCache {
       System.out.println("Try to get D: " + cache.get("D"));
     } catch (IllegalArgumentException e) {
       System.out.println("Expected error while getting D: " + e.getMessage()); // D should have been evicted; LRU of
-                                                                               // lowest
-      // priority
+                                                                               // lowest priority
     }
   }
 
   public ExtendedLRUCache(int size) {
     this.maxSize = size;
     this.expiryMap = new TreeMap<Integer, QueueElem>();
-    this.priorityMap = new TreeMap<Integer, Queue<QueueElem>>();
+    this.priorityMap = new TreeMap<Integer, Map<String, QueueElem>>();
     this.keyMap = new HashMap<String, QueueElem>();
   }
 
   public void evictItem(int currentTime) {
     // Assumption is that expiration times are unique
     QueueElem toRemove = expiryMap.firstEntry().getValue();
-    Queue<QueueElem> lruCache;
+    Map<String, QueueElem> lruCache;
     if (toRemove.expireTime <= currentTime) {
       lruCache = priorityMap.get(toRemove.priority);
     } else {
       lruCache = priorityMap.firstEntry().getValue();
-      toRemove = lruCache.peek();
+      toRemove = lruCache.entrySet().iterator().next().getValue(); // Gets head of linked list, LRU element
     }
 
-    lruCache.remove(toRemove);
+    lruCache.remove(toRemove.key);
+
     // If cache is empty, remove this priority from the map entirely
     if (lruCache.size() == 0) {
       priorityMap.remove(toRemove.priority);
@@ -72,8 +72,8 @@ public class ExtendedLRUCache {
 
     if (!keyMap.containsKey(key)) {
       QueueElem elem = new QueueElem(key, value, priority, expireTime);
-      Queue<QueueElem> lruCache = new LinkedList<QueueElem>();
-      lruCache.add(elem);
+      Map<String, QueueElem> lruCache = priorityMap.containsKey(priority) ? priorityMap.get(priority) : new LinkedHashMap<String, QueueElem>(this.maxSize / 2, .75f, true); // Ordering of elements will be access order
+      lruCache.put(elem.key, elem);
       expiryMap.put(elem.expireTime, elem);
       priorityMap.put(elem.priority, lruCache);
       keyMap.put(key, elem);
@@ -82,15 +82,9 @@ public class ExtendedLRUCache {
       // Move element to back of queue in priority map
 
       QueueElem elem = keyMap.get(key);
+      priorityMap.get(elem.priority).get(key); // Updates access order in LRU cache
       elem.value = value;
-      updateMostRecentElement(elem);
     }
-  }
-
-  void updateMostRecentElement(QueueElem elem) {
-    Queue<QueueElem> lruCache = priorityMap.get(elem.priority);
-    lruCache.remove(elem);
-    lruCache.add(elem);
   }
 
   public int get(String key) throws IllegalArgumentException {
@@ -99,7 +93,7 @@ public class ExtendedLRUCache {
     }
 
     QueueElem elem = keyMap.get(key);
-    updateMostRecentElement(elem);
+    priorityMap.get(elem.priority).get(key); // Updates access order in LRU cache
     return elem.value;
   }
 
